@@ -1,0 +1,13 @@
+{
+  "clusterkeys":[
+    "key1",
+    "key2"
+  ],
+  "etcd_hosts":[
+    "host1",
+    "host2",
+    "host3"
+  ],
+  "logfile":"./redismap.log"
+
+}
