@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 	"io"
 	"log"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -78,15 +79,24 @@ func processConnectedSlaves(s string) map[string]string {
 	return retMap
 }
 
-/*
-type redisinfo struct {
-	host      string
-	info      map[string]string
-	slaveList []*redisinfo
-}*/
+func GetHostnameFromIP(s string) string {
+	addr, err := net.LookupAddr(s)
+	if err != nil {
+		Mlog.Print("Lookup error on ", s, err.Error())
+		return s
+	}
+	return addr[0]
+}
 
-func GetRedisInfo(hostlist []string) []map[string]string {
-	redisInfoList := make([]map[string]string, 0)
+type Redisinfo struct {
+	Host      string
+	Role      string
+	Info      map[string]string
+	SlaveList []string
+}
+
+func GetRedisInfo(hostlist []string) []map[string]Redisinfo {
+	redisInfoList := make([]map[string]Redisinfo, 0)
 	for _, redisHost := range hostlist {
 		client := redis.NewClient(&redis.Options{
 			Addr:     redisHost,
@@ -94,27 +104,32 @@ func GetRedisInfo(hostlist []string) []map[string]string {
 			DB:       0,  // use default DB
 		})
 		info, err := client.Info("Replication").Result()
-
 		if err != nil {
 			Mlog.Print("Error on hoststring: ", redisHost, err)
 		}
 		hostMap := parseRedisInfo(info)
+		hostMap["host"] = redisHost
+		ri := Redisinfo{Host: redisHost, Info: hostMap, Role: hostMap["role"], SlaveList: nil}
 		if hostMap["role"] == "master" {
+			slaveList := make([]string, 0)
 			if hostMap["connected_slaves"] != "0" {
-				slaveList := make([]map[string]string, 0)
 				for key, value := range hostMap {
 					if len(key) < 5 {
 						continue
 					}
 					if key[:5] == "slave" {
 						val := processConnectedSlaves(value)
-						slaveList = append(slaveList, val)
+						//slaveList = append(slaveList, val)
 						// TODO -- attach it to the rest
+						slaveList = append(slaveList, fmt.Sprintf("%s:%s", GetHostnameFromIP(val["ip"]), val["port"]))
 					}
 				}
+				ri.SlaveList = slaveList
 			}
-			redisInfoList = append(redisInfoList, parseRedisInfo(info))
 		}
+		s, _ := json.Marshal(ri)
+		Mlog.Print("struct:", string(s))
+		redisInfoList = append(redisInfoList, ri)
 	}
 	return redisInfoList
 }
@@ -180,7 +195,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	clusterMap := make(map[string][]map[string]string, 0)
+	clusterMap := make(map[string][]map[string]Redisinfo, 0)
 	// spin through the clusterkeys
 	for _, clusterKey := range clusterKeys {
 		// do the etcd lookup to get list of redis hosts
@@ -190,6 +205,6 @@ func main() {
 		// do all masters have slaves
 		// are all slaves up to date
 	}
-	s, _ := json.Marshal(clusterMap)
-	Mlog.Print(string(s))
+	//s, _ := json.Marshal(clusterMap)
+	//Mlog.Print(string(s))
 }
