@@ -169,6 +169,24 @@ func GetServerList(kapi client.KeysAPI, url string) []string {
 	return hostList
 }
 
+func GetRedisMap(etcdHosts []string, clusterKeys []string) map[string]map[string]Redisinfo {
+	kapi, err := GetEtcdKapi(etcdHosts)
+	clusterMap := make(map[string]map[string]Redisinfo, 0)
+	if err != nil {
+		// we die on the inital because it assumes a user is there watching
+		clusterMap["error"] = map[string]Redisinfo{fmt.Sprintf("Error getting etcdKAPI: %v", err.Error()): Redisinfo{}}
+		return clusterMap
+	}
+
+	// spin through the clusterkeys
+	for _, clusterKey := range clusterKeys {
+		redisServerList := GetServerList(kapi, fmt.Sprintf("/redis/cluster/site/%s", clusterKey))
+		Mlog.Print("serverlist: ", redisServerList)
+		clusterMap[clusterKey] = GetRedisInfo(redisServerList)
+	}
+	return clusterMap
+}
+
 func main() {
 	// we want to set up the series of keys that we'll want to retrieve that will
 	// then contain the next set
@@ -186,26 +204,7 @@ func main() {
 	logFileName := viper.GetStringSlice("logfile")
 	Init(logFileName[0])
 
-	clusterKeys := viper.GetStringSlice("clusterkeys")
-	fmt.Printf("\n%s\n\n", clusterKeys)
-
-	kapi, err := GetEtcdKapi(viper.GetStringSlice("etcd_hosts"))
-	if err != nil {
-		// we die on the inital because it assumes a user is there watching
-		fmt.Printf("Error getting etcdKAPI\n\n", err.Error())
-		os.Exit(2)
-	}
-
-	clusterMap := make(map[string]map[string]Redisinfo, 0)
-	// spin through the clusterkeys
-	for _, clusterKey := range clusterKeys {
-		// do the etcd lookup to get list of redis hosts
-		redisServerList := GetServerList(kapi, fmt.Sprintf("/redis/cluster/site/%s", clusterKey))
-		Mlog.Print("serverlist: ", redisServerList)
-		clusterMap[clusterKey] = GetRedisInfo(redisServerList)
-		// do all masters have slaves
-		// are all slaves up to date
-	}
+	clusterMap := GetRedisMap(viper.GetStringSlice("etcd_hosts"), viper.GetStringSlice("clusterkeys"))
 	s, _ := json.MarshalIndent(clusterMap, "", "  ")
 	Mlog.Print(string(s))
 }
