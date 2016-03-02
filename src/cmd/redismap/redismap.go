@@ -95,8 +95,8 @@ type Redisinfo struct {
 	SlaveList []string
 }
 
-func GetRedisInfo(hostlist []string) []map[string]Redisinfo {
-	redisInfoList := make([]map[string]Redisinfo, 0)
+func GetRedisInfo(hostlist []string) map[string]Redisinfo {
+	redisInfoList := make(map[string]Redisinfo, 0)
 	for _, redisHost := range hostlist {
 		client := redis.NewClient(&redis.Options{
 			Addr:     redisHost,
@@ -127,9 +127,10 @@ func GetRedisInfo(hostlist []string) []map[string]Redisinfo {
 				ri.SlaveList = slaveList
 			}
 		}
-		s, _ := json.Marshal(ri)
+		s, _ := json.MarshalIndent(ri, "", "  ")
+		//s, _ := json.Marshal(ri)
 		Mlog.Print("struct:", string(s))
-		redisInfoList = append(redisInfoList, ri)
+		redisInfoList[redisHost] = ri
 	}
 	return redisInfoList
 }
@@ -195,7 +196,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	clusterMap := make(map[string][]map[string]Redisinfo, 0)
+	clusterMap := make(map[string]map[string]Redisinfo, 0)
 	// spin through the clusterkeys
 	for _, clusterKey := range clusterKeys {
 		// do the etcd lookup to get list of redis hosts
@@ -205,6 +206,6 @@ func main() {
 		// do all masters have slaves
 		// are all slaves up to date
 	}
-	//s, _ := json.Marshal(clusterMap)
-	//Mlog.Print(string(s))
+	s, _ := json.MarshalIndent(clusterMap, "", "  ")
+	Mlog.Print(string(s))
 }
